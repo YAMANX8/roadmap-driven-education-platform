@@ -8,10 +8,14 @@ function jwtGenerator(user_id,roleid) {
     roleId: roleid
   };
 
-  const token = jwt.sign(payload, process.env.jwtSecret, {
-    expiresIn: "48hr",
+  //access token
+  const accessToken = jwt.sign(payload, process.env.jwtSecret, {
+    expiresIn: "30s",
+  }); 
+  const refreshToken = jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET, {
+    expiresIn: "1d",
   });
 
-  return { token};
+  return { accessToken, refreshToken };
 }
 module.exports = jwtGenerator;

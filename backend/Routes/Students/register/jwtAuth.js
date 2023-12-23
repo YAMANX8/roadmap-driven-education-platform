@@ -4,7 +4,8 @@ const bcrypt = require("bcrypt");
 const jwtGenerator = require("../../../Utils/jwtGenerator");
 const validInfo = require("../../../middleware/validInfo");
 const authorization = require("../../../middleware/authorization.js");
-
+const dotenv = require("dotenv");
+dotenv.config();
 //register route
 
 router.post("/student/register", validInfo, async (req, res) => {
@@ -12,7 +13,7 @@ router.post("/student/register", validInfo, async (req, res) => {
     // 1. destructure the req.body (first_name,last_name,email,password)
 
     const { first_name, last_name, email, password } = req.body;
-    const role_id=2;
+    const role_id = 2;
     // 2. check if student exist (if student exist then throw error)
     const student = await pool.query("SELECT * FROM student WHERE email=$1", [
       email,
@@ -28,16 +29,21 @@ router.post("/student/register", validInfo, async (req, res) => {
     // 4.enter the new student inside our database
     const newStudent = await pool.query(
       "INSERT INTO student  (first_name,last_name,email,password,role_id) VALUES ($1,$2,$3,$4,$5) RETURNING *",
-      [first_name, last_name, email, bcryptPassword,role_id]
+      [first_name, last_name, email, bcryptPassword, role_id]
     );
 
     // 5.generating our jwt token
-    const { token } = jwtGenerator(
+    const { accessToken,refreshToken } = jwtGenerator(
       newStudent.rows[0].student_id,
       newStudent.rows[0].role_id
     );
-
-    res.status(200).json({ token, role_id });
+    res.cookie("jwt", refreshToken, {
+      httpOnly: true,
+      sameSite: "None",
+      secure: true,
+      maxAge: 24 * 60 * 60 * 1000,
+    });
+    res.status(200).json({ accessToken, role_id });
   } catch (error) {
     console.error(error.message);
     res.status(500).send("Server Error");
@@ -72,11 +78,18 @@ router.post("/student/login", validInfo, async (req, res) => {
 
     // 4. give them the jwt token
     else if (validPassword) {
-      const { token } = jwtGenerator(
+      const { accessToken, refreshToken } = jwtGenerator(
         student.rows[0].student_id,
-        student.rows[0].role_id,
+        student.rows[0].role_id
       );
-      return res.status(200).json({ token,role_id });
+
+      res.cookie("jwt", refreshToken, {
+        httpOnly: true,
+        sameSite: "None",
+        secure: true,
+        maxAge: 24 * 60 * 60 * 1000,
+      });
+      return res.status(200).json({ accessToken, role_id });
     }
   } catch (error) {
     console.error(error);

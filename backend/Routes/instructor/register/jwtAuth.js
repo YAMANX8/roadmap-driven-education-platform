@@ -32,12 +32,17 @@ router.post("/instructor/register", validInfo, async (req, res) => {
     );
 
     // 5.generating our jwt token
-    const { token } = jwtGenerator(
-      newInstructor.rows[0].user_id,
-      newInstructor.rows[0].role_id
+    const { accessToken, refreshToken } = jwtGenerator(
+      newStudent.rows[0].student_id,
+      newStudent.rows[0].role_id
     );
-
-    res.status(200).json({ token, role_id });
+    res.cookie("jwt", refreshToken, {
+      httpOnly: true,
+      sameSite: 'None',
+      secure:true,
+      maxAge: 24 * 60 * 60 * 1000,
+    });
+    res.status(200).json({ accessToken, role_id });
   } catch (error) {
     console.error(error.message);
     res.status(500).send("Server Error");
@@ -71,11 +76,18 @@ router.post("/instructor/login", validInfo, async (req, res) => {
 
     // 4. give them the jwt token
     else if (validPassword) {
-      const { token } = jwtGenerator(
-        instructor.rows[0].user_id,
-        instructor.rows[0].role_id
+      const { accessToken, refreshToken } = jwtGenerator(
+        student.rows[0].student_id,
+        student.rows[0].role_id
       );
-      return res.status(200).json({ token, role_id });
+
+      res.cookie("jwt", refreshToken, {
+        httpOnly: true,
+        sameSite: "None",
+        secure: true,
+        maxAge: 24 * 60 * 60 * 1000,
+      });
+      return res.status(200).json({ accessToken, role_id });
     }
   } catch (error) {
     console.error(error);

@@ -2,8 +2,8 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
+const cookieParser = require("cookie-parser");
 const app = express();
-
 //midleware
 app.use(cors({ origin: "http://localhost:5173", credentials: true }));
 app.use(express.json());
@@ -13,7 +13,9 @@ app.use(morgan("dev"));
 app.use("/image", express.static("Upload/Images"));
 app.use("/video", express.static("Upload/video"));
 
-// * Update arrangement for routes
+// middleware for cookies
+app.use(cookieParser());
+
 //ROUTES//
 
 //Home
@@ -28,7 +30,7 @@ app.use(
   require("./Routes/Students/dashboardStudent/dashboard")
 );
 
-//setting
+// setting route for student
 app.use(
   "/AcademicCompass/student/setting",
   require("./Routes/Students/settings/setting")
@@ -73,13 +75,13 @@ app.use(
   require("./Routes/instructor/settings/setting")
 );
 
-//show instructor dashboard
+// show instructor dashboard
 app.use(
   "/AcademicCompass/instructor/dashboard",
   require("./Routes/instructor/dashboard/dashboard")
 );
 
-//Create Course
+// Create Course
 app.use(
   "/AcademicCompass/instructor/createCourse",
   require("./Routes/instructor/createCourse/createCourse")
@@ -88,16 +90,26 @@ app.use(
 // Show Student Profile
 app.use(
   "/AcademicCompass/instructor/studentProfile",
-  require("./Routes/instructor/showingStudentProfile/studentProfile"));
+  require("./Routes/instructor/showingStudentProfile/studentProfile")
+);
 
 // Course Content
-app.use("/AcademicCompass/instructor/Course_Content", require("./Routes/instructor/Course Content/course_content"));
+app.use(
+  "/AcademicCompass/instructor/Course_Content",
+  require("./Routes/instructor/Course Content/course_content")
+);
 
 // edit course page
 app.use(
   "/AcademicCompass/instructor/editeCourseInfo",
   require("./Routes/instructor/editCoursePage/editCourseInfo")
 );
+
+// refreshToken route
+app.use("/AcademicCompass", require("./Routes/refreshToken/refreshToken.js"));
+
+// logout route
+app.use("/AcademicCompass", require("./Routes/refreshToken/logout.js"));
 
 const port = process.env.PORT || 5000;
 app.listen(port, () => {
