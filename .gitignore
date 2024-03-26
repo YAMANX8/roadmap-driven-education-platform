@@ -22,3 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Upload folder
+backend/Upload/
+
+# Test files
+backend/test
+
+backend/test.yml
+

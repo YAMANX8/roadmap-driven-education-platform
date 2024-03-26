@@ -1,69 +1,85 @@
-const router = require("express").Router();
-const db = require("../../Database/db");
-const jwt = require("jsonwebtoken");
-const checkPermission = require("../../middleware/checkPermissions");
-const authorization = require("../../middleware/authorization");
+const router = require('express').Router();
+const pool = require('../../database/db');
+const jwt = require('jsonwebtoken');
+const checkPermission = require('../../middleware/check-permissions');
+const authorization = require('../../middleware/authorization');
 
-router.get("/:courseId", async (req, res) => {
+router.get('/:courseId', async (req, res) => {
   try {
     // const studentId = req.params.studentId;
     const courseId = req.params.courseId;
-    const jwtToken = req.header("token");
+    const jwtToken = req.header('token');
     let Course_info;
     let values = [];
     if (!jwtToken) {
       Course_info = `
-      SELECT
-      course.course_thumnail,
-      course.course_title,
-      course.subtitle,
-      ROUND(COALESCE(AVG(Rating.stars_number), 0), 0) AS average_rating,
-      COUNT(DISTINCT Rating.enrollment_id) AS rating_count,
-      course.course_duration,
-      course.items_count,
-      Levels.level_name,
-      Users.first_name,
-      Users.last_name,
-      item_counts.article_count,  
-      item_counts.video_count,    
-      item_counts.quiz_count ,     
-      course.course_description
-    FROM
-      course
-      JOIN Levels ON course.course_level = Levels.level_id
-      JOIN Users ON course.instructor_id = Users.user_id
-      LEFT JOIN Enrollment ON course.course_id = Enrollment.course_id
-      LEFT JOIN Rating ON Enrollment.enrollment_id = Rating.enrollment_id
-      LEFT JOIN (
-        SELECT course_id,
-               COUNT(CASE WHEN item_type = 1 THEN 1 END) AS article_count,
-               COUNT(CASE WHEN item_type = 2 THEN 1 END) AS video_count,
-               COUNT(CASE WHEN item_type = 3 THEN 1 END) AS quiz_count
-        FROM items
-        GROUP BY course_id
-      ) AS item_counts ON course.course_id = item_counts.course_id
-    WHERE
-        -- enrollment_id = 12
-      course.course_id = $1
-    GROUP BY
-      course.course_thumnail,
-      course.course_title,
-      course.subtitle,
-      course.course_duration,
-      course.items_count,
-      Users.first_name,
-      Users.last_name,
-      Levels.level_name,
-      course.course_description,
-      item_counts.article_count,  
-      item_counts.video_count,    
-      item_counts.quiz_count;         
+        SELECT
+          course.course_thumnail,
+          course.course_title,
+          course.subtitle,
+          ROUND(COALESCE(AVG(Rating.stars_number), 0), 0) AS average_rating,
+          COUNT(DISTINCT Rating.enrollment_id) AS rating_count,
+          course.course_duration,
+          course.items_count,
+          Levels.level_name,
+          Users.first_name,
+          Users.last_name,
+          item_counts.article_count,
+          item_counts.video_count,
+          item_counts.quiz_count,
+          course.course_description
+        FROM
+          course
+          JOIN Levels ON course.course_level = Levels.level_id
+          JOIN Users ON course.instructor_id = Users.user_id
+          LEFT JOIN Enrollment ON course.course_id = Enrollment.course_id
+          LEFT JOIN Rating ON Enrollment.enrollment_id = Rating.enrollment_id
+          LEFT JOIN (
+            SELECT
+              course_id,
+              COUNT(
+                CASE
+                  WHEN item_type = 1 THEN 1
+                END
+              ) AS article_count,
+              COUNT(
+                CASE
+                  WHEN item_type = 2 THEN 1
+                END
+              ) AS video_count,
+              COUNT(
+                CASE
+                  WHEN item_type = 3 THEN 1
+                END
+              ) AS quiz_count
+            FROM
+              items
+            GROUP BY
+              course_id
+          ) AS item_counts ON course.course_id = item_counts.course_id
+        WHERE
+          -- enrollment_id = 12
+          course.course_id = $1
+        GROUP BY
+          course.course_thumnail,
+          course.course_title,
+          course.subtitle,
+          course.course_duration,
+          course.items_count,
+          Users.first_name,
+          Users.last_name,
+          Levels.level_name,
+          course.course_description,
+          item_counts.article_count,
+          item_counts.video_count,
+          item_counts.quiz_count;
       `;
       values = [courseId];
     }
     // إذا مسجل دخول
     else {
       // Extract student ID from the token and proceed with your logic
+      // eslint-disable-next-line no-undef
       const payload = jwt.verify(jwtToken, process.env.jwtSecret);
       const studentId = payload.userId;
       const roleId = payload.roleId;
@@ -71,109 +87,166 @@ router.get("/:courseId", async (req, res) => {
         //permission
         const hasAccess = await checkPermission(
           studentId,
-          "show_course",
-          roleId
+          'show_course',
+          roleId,
         );
         if (!hasAccess) {
-          return res.status(403).json("Access denied");
+          return res.status(403).json('Access denied');
         }
       } catch (error) {
         console.log(error);
       }
       Course_info = `
-      SELECT
-        course.course_thumnail,
-        course.course_title,
-        course.subtitle,
-        ROUND(COALESCE(AVG(Rating.stars_number), 0), 0) AS average_rating,
-        COUNT(DISTINCT Rating.enrollment_id) AS rating_count,
-        course.course_duration,
-        course.items_count,
-        Levels.level_name,
-        Users.first_name,
-        Users.last_name,
-        item_counts.article_count,  
-        item_counts.video_count,    
-        item_counts.quiz_count ,     
-        course.course_description,
-        COALESCE(IS_ENROLLED.is_enrolled, 0) AS is_enrolled
-      FROM
-        course
-        JOIN Levels ON course.course_level = Levels.level_id
-        JOIN Users ON course.instructor_id = Users.user_id
-        LEFT JOIN Enrollment ON course.course_id = Enrollment.course_id
-        LEFT JOIN Rating ON Enrollment.enrollment_id = Rating.enrollment_id
-        LEFT JOIN (
-          SELECT course_id,
-                 COUNT(CASE WHEN item_type = 1 THEN 1 END) AS article_count,
-                 COUNT(CASE WHEN item_type = 2 THEN 1 END) AS video_count,
-                 COUNT(CASE WHEN item_type = 3 THEN 1 END) AS quiz_count
-          FROM items
-          GROUP BY course_id
-        ) AS item_counts ON course.course_id = item_counts.course_id
-        LEFT JOIN (
-          SELECT course_id,
-          -- * student_id = 9
-                 MAX(CASE WHEN student_id = $1  THEN 1 ELSE 0 END) AS is_enrolled
-          FROM Enrollment
-          GROUP BY course_id
-        ) AS IS_ENROLLED ON course.course_id = IS_ENROLLED.course_id
-      WHERE
+        SELECT
+          course.course_thumnail,
+          course.course_title,
+          course.subtitle,
+          ROUND(COALESCE(AVG(Rating.stars_number), 0), 0) AS average_rating,
+          COUNT(DISTINCT Rating.enrollment_id) AS rating_count,
+          course.course_duration,
+          course.items_count,
+          Levels.level_name,
+          Users.first_name,
+          Users.last_name,
+          item_counts.article_count,
+          item_counts.video_count,
+          item_counts.quiz_count,
+          course.course_description,
+          COALESCE(IS_ENROLLED.is_enrolled, 0) AS is_enrolled
+        FROM
+          course
+          JOIN Levels ON course.course_level = Levels.level_id
+          JOIN Users ON course.instructor_id = Users.user_id
+          LEFT JOIN Enrollment ON course.course_id = Enrollment.course_id
+          LEFT JOIN Rating ON Enrollment.enrollment_id = Rating.enrollment_id
+          LEFT JOIN (
+            SELECT
+              course_id,
+              COUNT(
+                CASE
+                  WHEN item_type = 1 THEN 1
+                END
+              ) AS article_count,
+              COUNT(
+                CASE
+                  WHEN item_type = 2 THEN 1
+                END
+              ) AS video_count,
+              COUNT(
+                CASE
+                  WHEN item_type = 3 THEN 1
+                END
+              ) AS quiz_count
+            FROM
+              items
+            GROUP BY
+              course_id
+          ) AS item_counts ON course.course_id = item_counts.course_id
+          LEFT JOIN (
+            SELECT
+              course_id,
+              -- * student_id = 9
+              MAX(
+                CASE
+                  WHEN student_id = $1 THEN 1
+                  ELSE 0
+                END
+              ) AS is_enrolled
+            FROM
+              Enrollment
+            GROUP BY
+              course_id
+          ) AS IS_ENROLLED ON course.course_id = IS_ENROLLED.course_id
+        WHERE
           -- enrollment_id = 12
-        course.course_id = $2
-      GROUP BY
-        course.course_thumnail,
-        course.course_title,
-        course.subtitle,
-        course.course_duration,
-        course.items_count,
-        Users.first_name,
-        Users.last_name,
-        Levels.level_name,
-        course.course_description,
-        IS_ENROLLED.is_enrolled,
-        item_counts.article_count,  
-        item_counts.video_count,    
-        item_counts.quiz_count;     
+          course.course_id = $2
+        GROUP BY
+          course.course_thumnail,
+          course.course_title,
+          course.subtitle,
+          course.course_duration,
+          course.items_count,
+          Users.first_name,
+          Users.last_name,
+          Levels.level_name,
+          course.course_description,
+          IS_ENROLLED.is_enrolled,
+          item_counts.article_count,
+          item_counts.video_count,
+          item_counts.quiz_count;
       `;
       values = [studentId, courseId];
     }
     const Get_Course_info = `${Course_info}`;
-    const Get_Topic_content =
-      "SELECT Topic_Level_1.topic_level1_id, Topic_Level_1.topic_title AS tl1, Topic_Level_n.topic_id, Topic_Level_n.topic_title AS tln, Items.item_id, Items.item_title, Items.item_no, Items_Types.type_name FROM course JOIN items ON course.course_id= items.course_id JOIN Items_Types ON Items.item_type= Items_Types.type_id join Topic_Level_N ON items.topic_id= Topic_Level_N.topic_id join Topic_Level_1 ON Topic_Level_N.topic_level1_id= Topic_Level_1.topic_level1_id WHERE course.course_id = $1";
-    const Part_2From_Course_info =
-      "SELECT List_Type.type_name, Course_Lists.item_body, Course_Lists.item_order FROM course JOIN Course_Lists ON Course.course_id = Course_Lists.course_id JOIN List_Type ON Course_Lists.list_type= List_Type.type_id WHERE course.course_id = $1";
-    const Get_Review =
-      "SELECT Rating.rating_id, Student.first_name, Student.last_name, Student.picture, Rating.stars_number, Rating.review FROM course LEFT JOIN Enrollment ON Course.course_id = Enrollment.course_id JOIN Student ON Enrollment.student_id = Student.student_id JOIN Rating ON Enrollment.enrollment_id = Rating.enrollment_id WHERE course.course_id = $1";
+    const Get_Topic_content = `
+      SELECT
+        Topic_Level_1.topic_level1_id,
+        Topic_Level_1.topic_title AS tl1,
+        Topic_Level_n.topic_id,
+        Topic_Level_n.topic_title AS tln,
+        Items.item_id,
+        Items.item_title,
+        Items.item_no,
+        Items_Types.type_name
+      FROM
+        course
+        JOIN items ON course.course_id = items.course_id
+        JOIN Items_Types ON Items.item_type = Items_Types.type_id
+        join Topic_Level_N ON items.topic_id = Topic_Level_N.topic_id
+        join Topic_Level_1 ON Topic_Level_N.topic_level1_id = Topic_Level_1.topic_level1_id
+      WHERE
+        course.course_id = $1
+    `;
+    const Part_2From_Course_info = `
+      SELECT
+        List_Type.type_name,
+        Course_Lists.item_body,
+        Course_Lists.item_order
+      FROM
+        course
+        JOIN Course_Lists ON Course.course_id = Course_Lists.course_id
+        JOIN List_Type ON Course_Lists.list_type = List_Type.type_id
+      WHERE
+        course.course_id = $1
+    `;
+    const Get_Review = `
+      SELECT
+        Rating.rating_id,
+        Student.first_name,
+        Student.last_name,
+        Student.picture,
+        Rating.stars_number,
+        Rating.review
+      FROM
+        course
+        LEFT JOIN Enrollment ON Course.course_id = Enrollment.course_id
+        JOIN Student ON Enrollment.student_id = Student.student_id
+        JOIN Rating ON Enrollment.enrollment_id = Rating.enrollment_id
+      WHERE
+        course.course_id = $1
+    `;
     // const values = [studentId, courseId];
 
-    const Get_Course_info_result = await db.query(Get_Course_info, values);
-    const Get_Topic_content_result = await db.query(Get_Topic_content, [
+    const Get_Course_info_result = await pool.query(Get_Course_info, values);
+    const Get_Topic_content_result = await pool.query(Get_Topic_content, [
       courseId,
     ]);
-    const Part_2From_Course_info_result = await db.query(
+    const Part_2From_Course_info_result = await pool.query(
       Part_2From_Course_info,
-      [courseId]
+      [courseId],
     );
-    const Get_Review_result = await db.query(Get_Review, [courseId]);
-
-    // const data4 = Part_2From_Course_info_result.rows.map((item) => ({
-    //   [item.type_name]: {
-    //     item_body: item.item_body,
-    //     item_order: item.item_order,
-    //   },
-    // }));
+    const Get_Review_result = await pool.query(Get_Review, [courseId]);
 
     //for learn..
     const learnItems = [];
     const forWhoItems = [];
     const requirementsItems = [];
     Part_2From_Course_info_result.rows.forEach((row) => {
-      if (row.type_name === "In this course you will learn the following") {
+      if (row.type_name === 'In this course you will learn the following') {
         learnItems.push(row.item_body);
-      } else if (row.type_name === "Who this course is for:") {
+      } else if (row.type_name === 'Who this course is for:') {
         forWhoItems.push(row.item_body);
-      } else if (row.type_name === "Requirements") {
+      } else if (row.type_name === 'Requirements') {
         requirementsItems.push(row.item_body);
       }
     });
@@ -215,7 +288,7 @@ router.get("/:courseId", async (req, res) => {
 
       // البحث عن الموضوع الفرعي الحالي في subTopics
       const currentSubTopic = currentTopic.subTopics.find(
-        (subTopic) => subTopic.id === subTopicId
+        (subTopic) => subTopic.id === subTopicId,
       );
 
       currentSubTopic.items.push({
@@ -236,7 +309,7 @@ router.get("/:courseId", async (req, res) => {
       comment: row.review,
     }));
     const frontEndJson = {
-      course_thumnail: Get_Course_info_result.rows[0].course_thumnail,
+      course_thumnail: `http://localhost:5000/image/${Get_Course_info_result.rows[0].course_thumnail}`,
       course_title: Get_Course_info_result.rows[0].course_title,
       subtitle: Get_Course_info_result.rows[0].subtitle,
       stars: Get_Course_info_result.rows[0].average_rating,
@@ -259,254 +332,68 @@ router.get("/:courseId", async (req, res) => {
 
     res.json(frontEndJson);
   } catch (err) {
-    console.error("Error retrieving course information:", err);
-    res.status(500).json({ error: "Server Error" });
+    console.error('Error retrieving course information:', err);
+    res.status(500).json({ error: 'Server Error' });
   }
 });
 
-router.post("/enroll", authorization, async (req, res) => {
+router.post('/enroll', authorization, async (req, res) => {
   try {
     const studentId = req.user.userId;
     const roleId = req.user.roleId;
     //permission
     const hasAccess = await checkPermission(
       studentId,
-      "enrollToCourse",
-      roleId
+      'enrollToCourse',
+      roleId,
     );
     if (!hasAccess) {
-      return res.status(403).json("Access denied");
+      return res.status(403).json('Access denied');
     }
     const { courseId } = req.body;
     const progress = 0;
-    const startDate = new Date();
+    const startDate = new Date(); //
 
     //تجهيز استعلام للتحقق من أن الطالب قد قام مسبقاً بالاشتراك بالدورة
     const checkEnrollmentQuery = `
-      SELECT student_id, course_id
-      FROM enrollment
-      WHERE student_id = '${studentId}' AND course_id = '${courseId}';
-      `;
-    const { rows } = await db.query(checkEnrollmentQuery);
-
+      SELECT
+        student_id,
+        course_id
+      FROM
+        enrollment
+      WHERE
+        student_id = '${studentId}'
+        AND course_id = '${courseId}';
+    `;
+    const { rows } = await pool.query(checkEnrollmentQuery);
     if (rows.length === 0) {
       const insertEnrollmentQuery = `
-      INSERT INTO enrollment (student_id, progress_state, strting_date ,course_id)
-      VALUES ($1, $2, $3, $4)
-      RETURNING enrollment_id;`;
+        INSERT INTO
+          enrollment (
+            student_id,
+            progress_state,
+            strting_date,
+            course_id
+          )
+        VALUES
+          ($1, $2, $3, $4)
+        RETURNING
+          enrollment_id;
+      `;
 
       const values = [studentId, progress, startDate, courseId];
-
-      const result = await db.query(insertEnrollmentQuery, values);
+      const result = await pool.query(insertEnrollmentQuery, values);
 
       res.json({ enrollmentId: result.rows[0].enrollment_id });
     } else {
       return res
         .status(401)
-        .json({ message: "You are already enrolled to this course!" });
+        .json({ message: 'You are already enrolled to this course!' });
     }
   } catch (err) {
-    console.error("Error inserting enrollment:", err);
-    res.status(500).json({ error: "Server Error" });
+    console.error('Error inserting enrollment:', err);
+    res.status(500).json({ error: 'Server Error' });
   }
 });
 
 module.exports = router;
-
-`{
-    image: Card,
-
-    title: "Learn Api basics, and learn how to integrate with the backend",
-
-    subtitle: "Fetch api: Explore how to connect to various web APIs using JavaScript fetch. Use the returned data JSON data within you Code.",
-
-    stars: 4.5,
-
-    ratings: 1000,
-
-    duration: 10,
-
-    itemsCount: 75,
-
-    level: "beginres",
-
-    instructor: "Jone Doe",
-
-    videoCount: 25,
-
-    quizCount: 25,
-
-    articleCount: 25,
-
-    descripation: lorem ipsom,
-
-    learn: [
-      "Work with one of the most in-demand web development programming languages",
-      "Build modern, fast and scalable server-side web applications with NodeJS, databases like SQL or MongoDB and more",
-      "Get a thorough introduction to DenoJS",
-      "Learn the basics as well as advanced concepts of NodeJS in great detail",
-      "Understand the NodeJS ecosystem and build server-side rendered apps, REST APIs and GraphQL APIs",
-    ],
-
-    forWho: [
-      "Beginner or advanced web developers who want to dive into backend (server-side) development with NodeJS",
-      "Everyone who's interested in building modern, scalable and high-performing web applications",
-      "Experienced NodeJS developers who want to dive into specific features like using GraphQL with NodeJS",
-      "Anyone interested in learning how to program that is already struggling or intimidated by the process",
-    ],
-
-    requirements: [
-      "General knowledge of how the web works is recommended but not a must-have",
-      "Basic JavaScript knowledge is strongly recommended but could be picked up whilst going through the course",
-      "NO NodeJS knowledge is required!",
-      "Access to the internet",
-    ],
-
-    courseContent: [
-      {
-        id: 1,
-        topicTitle: "Topic level 1",
-        subTopics: [
-          {
-            id: 1,
-            title: "webpack",
-            items: [
-              {
-                id: 1,
-                title: "video intro",
-                order: 1,
-                type: "video",
-              },
-              {
-                id: 2,
-                title: "An Article",
-                order: 2,
-                type: "article",
-              },
-              {
-                id: 3,
-                title: "An Quiz",
-                order: 3,
-                type: "quiz",
-              },
-            ],
-          },
-          {
-            id: 2,
-            title: "Topic level N",
-            items: [
-              {
-                id: 1,
-                title: "A Lecture",
-                order: 1,
-                type: "video",
-              },
-              {
-                id: 2,
-                title: "An Article",
-                order: 2,
-                type: "article",
-              },
-              {
-                id: 3,
-                title: "A Quiz",
-                order: 3,
-                type: "quiz",
-              },
-            ],
-          },
-        ],
-      },
-      {
-        id: 2,
-        topicTitle: "Topic level 1",
-        subTopics: [
-          {
-            id: 1,
-            title: "Topic level N",
-            items: [
-              {
-                id: 4,
-                title: "A Lecture",
-                order: 4,
-                type: "video",
-              },
-              {
-                id: 5,
-                title: "An Article",
-                order: 5,
-                type: "article",
-              },
-              {
-                id: 6,
-                title: "A Quiz",
-                order: 6,
-                type: "quiz",
-              },
-            ],
-          },
-        ],
-      },
-    ],
-    
-    reviews: [
-      {
-        id: 1,
-        fname: "Ahmed",
-        lname: "Omer",
-        images: Profile,
-        stars: 4.5,
-        comment: "The course contains a lot of useful information, and if you are
-      just starting out in the world of programming, I would
-       recommend this course. The only criticism is that it has
-        become quite outdated, and many things have changed, so"}
-      recommend this course. The only criticism is that it has
-        recommend this course. The only criticism is that it has,
-        img: Profile,
-      },
-      {
-        id: 2,
-        fname: "Yaman",
-        lname: "Al-Jazzar",
-        image: Card,
-        stars: 4.5,
-        comment: "The course contains a lot of useful information, and if you are
-      just starting out in the world of programming, I would
-      soso soso soso soso sosososo soso soso soso sosososo soso
-       soso soso sosososo soso soso soso sosososo soso soso soso soso
-       soso soso sosososo soso soso soso sosososo soso soso soso soso
-       soso soso sosososo soso soso soso sosososo soso soso soso soso",
-        
-        img: Profile,
-      },
-      {
-        id: 3,
-        fname: "Ahmed",
-        lname: "Sadek",
-        image: Card,
-        stars: 4.5,
-        comment: "The course contains a lot of useful information, and if you are
-      just starting out in the world of programming, I would
-       recommend this course. The only criticism is that it has
-       momo momo momo momo momomomo momo momo momo momomomo momo
-       momo momo momomomo momo momo momo momomomo momo momo momo momo",
-        
-        img: Profile,
-      },
-      {
-        id: 4,
-        fname: "Ammar",
-        lname: "Al-Essrawi",
-        image: Card,
-        stars: 4.5,
-        comment: "The course contains a lot of useful information, and if you are
-        just starting out in the world of programming, I would
-       recommend this course. The only criticism is that it has
-        become quite outdated, and many things have changed, so 
-        ",
-        
-        img: Profile,
-      },
-    ],
-  }
-        `;

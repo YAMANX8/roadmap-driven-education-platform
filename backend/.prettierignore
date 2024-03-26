@@ -1,0 +1,9 @@
+node_modules
+package-lock.json
+package.json
+Database
+test
+.eslintrc
+.env
+.mochrc.json
+
