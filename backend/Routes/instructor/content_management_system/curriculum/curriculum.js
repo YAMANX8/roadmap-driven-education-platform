@@ -307,8 +307,12 @@ router.get(
         getInfoAboutQuestions,
         getInfoAboutQuestionValue,
       );
+      const quizId = result.rows.length > 0 ? result.rows[0].quiz_id : null;
       // respone
-      res.status(200).json(result.rows);
+      res.status(200).json({
+        quiz_id: quizId,
+        questions: result.rows,
+      });
     } catch (err) {
       console.error('Error retrieving questions information:', err);
       res.status(500).json({ error: 'Server Error' });
@@ -316,7 +320,7 @@ router.get(
   },
 );
 
-// get options data by question ID
+// get options && questoin data by question ID
 router.get(
   '/curriculum/options/:questionId',
   authorization,
@@ -325,6 +329,7 @@ router.get(
       const instructorId = req.user.userId;
       const roleId = req.user.roleId;
       const questionId = req.params.questionId;
+
       // permission
       const hasAccess = await checkPermission(
         instructorId,
@@ -335,22 +340,47 @@ router.get(
         return res.status(403).json('Access denied');
       }
 
-      const getInfoAboutOptions = `
-    SELECT * FROM option WHERE question_id = $1;
+      // Query to get question and options
+      const getInfoAboutOptionsAndQuestion = `
+      SELECT q.question_id, q.question_body, q.question_no, q.question_points, 
+             o.option_id, o.option_body, o.is_correct, o.option_no
+      FROM question q
+      LEFT JOIN option o ON q.question_id = o.question_id
+      WHERE q.question_id = $1;
     `;
-      const getInfoAboutOptionsValue = [questionId];
+      const getInfoAboutOptionsAndQuestionValue = [questionId];
       const result = await pool.query(
-        getInfoAboutOptions,
-        getInfoAboutOptionsValue,
+        getInfoAboutOptionsAndQuestion,
+        getInfoAboutOptionsAndQuestionValue,
       );
-      // respone
-      res.status(200).json(result.rows);
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Question not found' });
+      }
+
+      // Prepare response
+      const question = {
+        question_id: result.rows[0].question_id,
+        question_body: result.rows[0].question_body,
+        question_no: result.rows[0].question_no,
+        question_points: result.rows[0].question_points,
+        options: result.rows.map((row) => ({
+          option_id: row.option_id,
+          option_body: row.option_body,
+          is_correct: row.is_correct,
+          option_no: row.option_no,
+        })),
+      };
+
+      // Respond with question and options
+      res.status(200).json(question);
     } catch (err) {
-      console.error('Error retrieving options information:', err);
+      console.error('Error retrieving options and question information:', err);
       res.status(500).json({ error: 'Server Error' });
     }
   },
 );
+
 
 // insert
 // new question
@@ -731,13 +761,14 @@ router.put(
         await pool.query(updateVideoQuery, updateVideoValues);
         res.status(200).json({ message: 'Video updated successfully' });
       } else {
+        const videoFileName = req.file.filename;
         // insert video data in the database
         const insertVideoQuery = `
         INSERT INTO video (video_path,item_id,video_duration,upload_date)
         VALUES
         ($1,$2,$3,$4);
        `;
-        const encodeFielPath = encodeURIComponent(videoFilePath);
+        const encodeFielPath = encodeURIComponent(videoFileName);
         const upload_date = new Date().toISOString().split('T')[0];
         const insertVideoValues = [
           encodeFielPath,
@@ -764,7 +795,7 @@ router.put(
       const instructorId = req.user.userId;
       const roleId = req.user.roleId;
       const questionId = req.params.questionId;
-      const { question_body, options } = req.body;
+      const { question_body, options, question_points } = req.body;
       // permission
       const hasAccess = await checkPermission(
         instructorId,
@@ -777,10 +808,10 @@ router.put(
 
       const updateQuestion = `
         UPDATE question
-        SET question_body = $1
-        WHERE question_id = $2
+        SET question_body = $1 , question_points = $2
+        WHERE question_id = $3
     `;
-      const updateQuestionValue = [question_body, questionId];
+      const updateQuestionValue = [question_body, question_points, questionId];
 
       // add options // check of option_no
       if (options && options.length > 0) {
